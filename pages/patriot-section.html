@@ -31,16 +31,17 @@
         font-family: 'Courier New', Courier, monospace;
         font-size: 12px;
         line-height: 12px;
-        background-color: #000;
-        color: #fff;
+        background-color: #ffffff; /* White Background */
+        color: #000000;            /* Default Text Black */
         width: 100%;
         max-width: 900px;
         margin: 20px auto;
         padding: 20px;
         border-radius: 8px;
-        border: 2px solid #333;
+        border: 2px solid #ccc;    /* Lighter border */
         overflow: hidden;
         user-select: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     #ascii-stage {
         white-space: pre;
@@ -48,6 +49,7 @@
         margin: 0 auto;
         text-align: center;
         width: fit-content;
+        font-weight: bold; /* Bold looks better on white */
     }
 </style>
 </head>
@@ -83,15 +85,14 @@
     ];
 
     // --- RENDERER ---
-    // The buffer stores objects: { char: ' ', color: '#fff' }
     let buffer = [];
 
     function initBuffer() {
-        buffer = new Array(WIDTH * HEIGHT).fill(null).map(() => ({ char: ' ', color: '#000' }));
+        // Initialize with spaces and white color (invisible on white bg, but clean)
+        buffer = new Array(WIDTH * HEIGHT).fill(null).map(() => ({ char: ' ', color: '#fff' }));
     }
 
-    function setPixel(x, y, char, color = '#fff') {
-        // Round coordinates to ensure integers
+    function setPixel(x, y, char, color = '#000') {
         x = Math.floor(x);
         y = Math.floor(y);
         
@@ -103,7 +104,6 @@
 
     // --- LOGIC: FLAG ---
     function drawFlag() {
-        // Flag dimensions
         const flagX = 10;
         const flagY = 8;
         const flagW = 60;
@@ -112,36 +112,30 @@
         for (let r = 0; r < flagH; r++) {
             for (let c = 0; c < flagW; c++) {
                 
-                // 1. Calculate Wave Physics
-                // We offset the Y position based on X and Time (frame)
+                // Physics: Waving effect
                 const waveOffset = Math.sin((c * 0.15) + (frame * 0.15)) * 1.5;
                 const actualY = flagY + r + waveOffset;
                 const actualX = flagX + c;
 
-                // 2. Determine Color/Pattern
                 let char = '=';
-                let color = '#fff'; // White stripes default
+                let color = '#000';
 
-                // The Canton (Blue box with stars)
-                // Roughly 40% of width, 50% of height
+                // Canton (Blue box)
                 if (r < flagH * 0.5 && c < flagW * 0.4) {
-                    color = '#44f'; // Blue
-                    // Draw stars in a grid pattern
+                    color = '#00008b'; // Dark Blue
                     if ((r + c) % 4 === 0) {
                         char = '*';
-                        color = '#fff'; // White Stars
+                        color = '#ffffff'; // White Stars
                     } else {
-                        char = ' '; // Space in blue field
+                        char = '▓'; // Solid fill for blue field
                     }
                 } else {
                     // Stripes
-                    // 13 stripes roughly map to the rows. 
-                    // To simplify for ASCII, we alternate every 2 rows roughly
                     if (Math.floor(r / 2) % 2 === 0) {
-                        color = '#f44'; // Red
+                        color = '#b22222'; // Firebrick Red (Darker)
                         char = '▓';
                     } else {
-                        color = '#fff'; // White
+                        color = '#cccccc'; // Light Grey (so it shows on white bg)
                         char = '░';
                     }
                 }
@@ -150,61 +144,55 @@
             }
         }
         
-        // Draw Flagpole
+        // Flagpole
         for(let i=0; i<28; i++) {
-             setPixel(flagX - 1, 5 + i, '|', '#888');
+             setPixel(flagX - 1, 5 + i, '|', '#444');
         }
-        setPixel(flagX - 1, 4, 'O', '#ff0'); // Gold top
+        setPixel(flagX - 1, 4, 'O', '#DAA520'); // Goldenrod
     }
 
     // --- LOGIC: FIREWORKS ---
     function updateFireworks() {
-        // Randomly spawn
         if (Math.random() < 0.05) {
             fireworks.push({
                 x: Math.random() * WIDTH,
-                y: Math.random() * (HEIGHT / 2) + HEIGHT/2, // Spawn from bottom half usually, but here we just pop
+                y: Math.random() * (HEIGHT / 2) + HEIGHT/2,
                 velX: 0,
                 velY: 0,
                 type: 'seed',
-                color: `hsl(${Math.random() * 360}, 100%, 70%)`,
+                // Darker HSL for visibility on white: Lightness set to 40%
+                color: `hsl(${Math.random() * 360}, 100%, 40%)`, 
                 life: 0,
-                targetY: Math.random() * 10 // Explode near top
+                targetY: Math.random() * 10 
             });
         }
 
-        // Update existing
         for (let i = fireworks.length - 1; i >= 0; i--) {
             let fw = fireworks[i];
             
             if (fw.type === 'seed') {
-                // Moving up
                 fw.y -= 1; 
                 setPixel(fw.x, fw.y, '|', fw.color);
                 
                 if (fw.y <= fw.targetY) {
-                    // Explode!
                     fw.type = 'particle';
                     fireworks.splice(i, 1);
-                    // Create particles
                     for (let p = 0; p < 12; p++) {
                         fireworks.push({
                             x: fw.x,
                             y: fw.y,
-                            // Random spread velocity
                             velX: (Math.random() - 0.5) * 2,
                             velY: (Math.random() - 0.5) * 2,
                             type: 'particle',
                             color: fw.color,
-                            life: 20 // Frames to live
+                            life: 20 
                         });
                     }
                 }
             } else {
-                // Particles expanding
                 fw.x += fw.velX;
                 fw.y += fw.velY;
-                fw.velY += 0.05; // Gravity
+                fw.velY += 0.05; 
                 fw.life--;
 
                 const char = (fw.life % 2 === 0) ? '*' : '+';
@@ -220,29 +208,25 @@
     // --- LOGIC: EAGLE ---
     function updateEagle() {
         if (!eagle.active) {
-            // Random chance to spawn if not active
             if (Math.random() < 0.01) {
                 eagle.active = true;
                 eagle.x = -10;
                 eagle.y = 2 + Math.random() * 5;
             }
         } else {
-            // Move eagle
-            eagle.x += 0.5; // Speed
-            
-            // Flap wings animation (cycle every 4 frames)
+            eagle.x += 0.5;
             let sprite = [...EAGLE_SPRITE];
             if (Math.floor(frame / 4) % 2 === 0) {
                 sprite[0] = " -^^- ";
-                sprite[2] = "      "; // Wings up/flat
+                sprite[2] = "      ";
             }
 
-            // Draw Eagle
             for (let r = 0; r < sprite.length; r++) {
                 for (let c = 0; c < sprite[r].length; c++) {
                     const char = sprite[r][c];
                     if (char !== ' ') {
-                        setPixel(eagle.x + c, eagle.y + r, char, '#DD0'); // Gold/Brown eagle
+                        // SaddleBrown for visibility
+                        setPixel(eagle.x + c, eagle.y + r, char, '#8B4513'); 
                     }
                 }
             }
@@ -255,15 +239,12 @@
 
     // --- MAIN LOOP ---
     function render() {
-        initBuffer(); // Clear screen
+        initBuffer();
         
-        // 1. Draw elements to buffer
         drawFlag();
         updateFireworks();
         updateEagle();
 
-        // 2. Convert buffer to HTML string
-        // Using spans for color is heavier on DOM, but necessary for requested effect
         let html = '';
         let lastColor = '';
         
@@ -271,9 +252,8 @@
             for (let x = 0; x < WIDTH; x++) {
                 const pixel = buffer[y * WIDTH + x];
                 
-                // Optimization: Only open a new span if color changes
                 if (pixel.color !== lastColor) {
-                    if (lastColor !== '') html += '</span>'; // Close previous
+                    if (lastColor !== '') html += '</span>'; 
                     html += `<span style="color:${pixel.color}">`;
                     lastColor = pixel.color;
                 }
@@ -289,7 +269,6 @@
         setTimeout(() => requestAnimationFrame(render), 1000 / FPS);
     }
 
-    // Start
     render();
 
 })();
