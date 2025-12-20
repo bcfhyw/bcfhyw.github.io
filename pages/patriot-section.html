@@ -1,0 +1,261 @@
+<style>
+    #ascii-container {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 12px;
+        line-height: 12px;
+        background-color: #000;
+        color: #fff;
+        width: 100%;
+        max-width: 900px;
+        margin: 20px auto;
+        padding: 20px;
+        border-radius: 8px;
+        border: 2px solid #333;
+        overflow: hidden;
+        user-select: none;
+    }
+    #ascii-stage {
+        white-space: pre;
+        display: block;
+        margin: 0 auto;
+        text-align: center;
+        width: fit-content;
+    }
+</style>
+
+<div id="ascii-container">
+    <div id="ascii-stage"></div>
+</div>
+
+<script>
+(function() {
+    // --- CONFIGURATION ---
+    const WIDTH = 80;
+    const HEIGHT = 30;
+    const FPS = 30;
+    
+    // --- STATE ---
+    let frame = 0;
+    const stage = document.getElementById('ascii-stage');
+    let fireworks = [];
+    let eagle = { x: -20, y: 5, active: false };
+
+    // ASCII Sprites
+    const EAGLE_SPRITE = [
+        " /T\\ ",
+        " (o) ",
+        "// \\\\"
+    ];
+
+    // --- RENDERER ---
+    // The buffer stores objects: { char: ' ', color: '#fff' }
+    let buffer = [];
+
+    function initBuffer() {
+        buffer = new Array(WIDTH * HEIGHT).fill(null).map(() => ({ char: ' ', color: '#000' }));
+    }
+
+    function setPixel(x, y, char, color = '#fff') {
+        // Round coordinates to ensure integers
+        x = Math.floor(x);
+        y = Math.floor(y);
+        
+        if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+            const index = y * WIDTH + x;
+            buffer[index] = { char, color };
+        }
+    }
+
+    // --- LOGIC: FLAG ---
+    function drawFlag() {
+        // Flag dimensions
+        const flagX = 10;
+        const flagY = 8;
+        const flagW = 60;
+        const flagH = 20;
+
+        for (let r = 0; r < flagH; r++) {
+            for (let c = 0; c < flagW; c++) {
+                
+                // 1. Calculate Wave Physics
+                // We offset the Y position based on X and Time (frame)
+                const waveOffset = Math.sin((c * 0.15) + (frame * 0.15)) * 1.5;
+                const actualY = flagY + r + waveOffset;
+                const actualX = flagX + c;
+
+                // 2. Determine Color/Pattern
+                let char = '=';
+                let color = '#fff'; // White stripes default
+
+                // The Canton (Blue box with stars)
+                // Roughly 40% of width, 50% of height
+                if (r < flagH * 0.5 && c < flagW * 0.4) {
+                    color = '#44f'; // Blue
+                    // Draw stars in a grid pattern
+                    if ((r + c) % 4 === 0) {
+                        char = '*';
+                        color = '#fff'; // White Stars
+                    } else {
+                        char = ' '; // Space in blue field
+                    }
+                } else {
+                    // Stripes
+                    // 13 stripes roughly map to the rows. 
+                    // To simplify for ASCII, we alternate every 2 rows roughly
+                    if (Math.floor(r / 2) % 2 === 0) {
+                        color = '#f44'; // Red
+                        char = '▓';
+                    } else {
+                        color = '#fff'; // White
+                        char = '░';
+                    }
+                }
+
+                setPixel(actualX, actualY, char, color);
+            }
+        }
+        
+        // Draw Flagpole
+        for(let i=0; i<28; i++) {
+             setPixel(flagX - 1, 5 + i, '|', '#888');
+        }
+        setPixel(flagX - 1, 4, 'O', '#ff0'); // Gold top
+    }
+
+    // --- LOGIC: FIREWORKS ---
+    function updateFireworks() {
+        // Randomly spawn
+        if (Math.random() < 0.05) {
+            fireworks.push({
+                x: Math.random() * WIDTH,
+                y: Math.random() * (HEIGHT / 2) + HEIGHT/2, // Spawn from bottom half usually, but here we just pop
+                velX: 0,
+                velY: 0,
+                type: 'seed',
+                color: `hsl(${Math.random() * 360}, 100%, 70%)`,
+                life: 0,
+                targetY: Math.random() * 10 // Explode near top
+            });
+        }
+
+        // Update existing
+        for (let i = fireworks.length - 1; i >= 0; i--) {
+            let fw = fireworks[i];
+            
+            if (fw.type === 'seed') {
+                // Moving up
+                fw.y -= 1; 
+                setPixel(fw.x, fw.y, '|', fw.color);
+                
+                if (fw.y <= fw.targetY) {
+                    // Explode!
+                    fw.type = 'particle';
+                    fireworks.splice(i, 1);
+                    // Create particles
+                    for (let p = 0; p < 12; p++) {
+                        fireworks.push({
+                            x: fw.x,
+                            y: fw.y,
+                            // Random spread velocity
+                            velX: (Math.random() - 0.5) * 2,
+                            velY: (Math.random() - 0.5) * 2,
+                            type: 'particle',
+                            color: fw.color,
+                            life: 20 // Frames to live
+                        });
+                    }
+                }
+            } else {
+                // Particles expanding
+                fw.x += fw.velX;
+                fw.y += fw.velY;
+                fw.velY += 0.05; // Gravity
+                fw.life--;
+
+                const char = (fw.life % 2 === 0) ? '*' : '+';
+                setPixel(fw.x, fw.y, char, fw.color);
+
+                if (fw.life <= 0) {
+                    fireworks.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    // --- LOGIC: EAGLE ---
+    function updateEagle() {
+        if (!eagle.active) {
+            // Random chance to spawn if not active
+            if (Math.random() < 0.01) {
+                eagle.active = true;
+                eagle.x = -10;
+                eagle.y = 2 + Math.random() * 5;
+            }
+        } else {
+            // Move eagle
+            eagle.x += 0.5; // Speed
+            
+            // Flap wings animation (cycle every 4 frames)
+            let sprite = [...EAGLE_SPRITE];
+            if (Math.floor(frame / 4) % 2 === 0) {
+                sprite[0] = " -^^- ";
+                sprite[2] = "      "; // Wings up/flat
+            }
+
+            // Draw Eagle
+            for (let r = 0; r < sprite.length; r++) {
+                for (let c = 0; c < sprite[r].length; c++) {
+                    const char = sprite[r][c];
+                    if (char !== ' ') {
+                        setPixel(eagle.x + c, eagle.y + r, char, '#DD0'); // Gold/Brown eagle
+                    }
+                }
+            }
+
+            if (eagle.x > WIDTH) {
+                eagle.active = false;
+            }
+        }
+    }
+
+    // --- MAIN LOOP ---
+    function render() {
+        initBuffer(); // Clear screen
+        
+        // 1. Draw elements to buffer
+        drawFlag();
+        updateFireworks();
+        updateEagle();
+
+        // 2. Convert buffer to HTML string
+        // Using spans for color is heavier on DOM, but necessary for requested effect
+        let html = '';
+        let lastColor = '';
+        
+        for (let y = 0; y < HEIGHT; y++) {
+            for (let x = 0; x < WIDTH; x++) {
+                const pixel = buffer[y * WIDTH + x];
+                
+                // Optimization: Only open a new span if color changes
+                if (pixel.color !== lastColor) {
+                    if (lastColor !== '') html += '</span>'; // Close previous
+                    html += `<span style="color:${pixel.color}">`;
+                    lastColor = pixel.color;
+                }
+                html += pixel.char;
+            }
+            html += '\n';
+        }
+        if (lastColor !== '') html += '</span>';
+
+        stage.innerHTML = html;
+        frame++;
+        
+        setTimeout(() => requestAnimationFrame(render), 1000 / FPS);
+    }
+
+    // Start
+    render();
+
+})();
+</script>
