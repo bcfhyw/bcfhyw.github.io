@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Taste Predictor</title>
+</head>
+<body>
+  <h1>Taste Predictor</h1>
+
+  <h2>Submit Dish</h2>
+  <form id="submissionForm">
+    <label>Title:</label><br />
+    <input type="text" id="title" required /><br /><br />
+
+    <label>Description:</label><br />
+    <textarea id="description" rows="4" required></textarea><br /><br />
+
+    <label>Image:</label><br />
+    <input type="file" id="image" accept="image/*" /><br /><br />
+
+    <button type="submit">Submit</button>
+  </form>
+
+  <div id="predictionSection" style="display:none;">
+    <h2>Prediction</h2>
+    <p>Predicted Taste Score: <strong id="predictedScore"></strong></p>
+    <pre id="axesOutput"></pre>
+  </div>
+
+  <div id="validationSection" style="display:none;">
+    <h2>Validation</h2>
+    <form id="validationForm">
+      <label>Actual Taste Score:</label><br />
+      <select id="actualScore" required>
+        <option value="No">No</option>
+        <option value="Meh">Meh</option>
+        <option value="Yes">Yes</option>
+        <option value="YES">YES</option>
+      </select><br /><br />
+
+      <label>High Contributor Ingredients:</label><br />
+      <input type="text" id="contributors" /><br /><br />
+
+      <label>Notes:</label><br />
+      <textarea id="notes" rows="4"></textarea><br /><br />
+
+      <button type="submit">Submit Validation</button>
+    </form>
+  </div>
+
+  <h2>Past Entry Lookup</h2>
+  <form id="lookupForm">
+    <label>Entry ID:</label><br />
+    <input type="text" id="lookupId" /><br /><br />
+    <button type="submit">Lookup</button>
+  </form>
+
+  <pre id="entryResult"></pre>
+
+  <script>
+    const API_BASE_URL = "https://hp58lhpeil.execute-api.us-east-1.amazonaws.com";
+
+    let currentEntryId = null;
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    document.getElementById("submissionForm").onsubmit = async (e) => {
+      e.preventDefault();
+
+      const title = document.getElementById("title").value.trim();
+      const description = document.getElementById("description").value.trim();
+      const imageFile = document.getElementById("image").files[0];
+
+      let imageBase64 = null;
+      let imageMimeType = null;
+
+      if (imageFile) {
+        imageBase64 = await fileToDataUrl(imageFile);
+        imageMimeType = imageFile.type;
+      }
+
+      const payload = {
+        title,
+        description,
+        image_base64: imageBase64,
+        image_mime_type: imageMimeType
+      };
+
+      const response = await fetch(`${API_BASE_URL}/predict`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Prediction failed");
+        return;
+      }
+
+      currentEntryId = data.entry_id;
+
+      document.getElementById("predictedScore").textContent = data.predicted_score;
+      document.getElementById("axesOutput").textContent = JSON.stringify(data.axes, null, 2);
+
+      document.getElementById("predictionSection").style.display = "block";
+      document.getElementById("validationSection").style.display = "block";
+    };
+
+    document.getElementById("validationForm").onsubmit = async (e) => {
+      e.preventDefault();
+
+      if (!currentEntryId) {
+        alert("No current entry to validate");
+        return;
+      }
+
+      const payload = {
+        entry_id: currentEntryId,
+        actual_score: document.getElementById("actualScore").value,
+        contributors: document.getElementById("contributors").value.trim(),
+        notes: document.getElementById("notes").value.trim()
+      };
+
+      const response = await fetch(`${API_BASE_URL}/validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Validation failed");
+        return;
+      }
+
+      alert("Validation saved");
+    };
+
+    document.getElementById("lookupForm").onsubmit = async (e) => {
+      e.preventDefault();
+
+      const id = document.getElementById("lookupId").value.trim();
+      if (!id) {
+        alert("Enter an entry ID");
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/entry?id=${encodeURIComponent(id)}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Lookup failed");
+        return;
+      }
+
+      document.getElementById("entryResult").textContent = JSON.stringify(data, null, 2);
+    };
+  </script>
+</body>
+</html>
