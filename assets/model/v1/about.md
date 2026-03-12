@@ -57,4 +57,10 @@ Each entry contains:
 
 ## Notes
 
-Currently untrained, to do: add past data in current data format, tune linear model
+Currently untrained linear model
+
+To do: 
+1) Refine embeddings to include any useful features
+2) Add past data in current data format with embeddings
+3) Train new linear model
+4) Consider using different model
