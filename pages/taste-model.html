@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Taste Predictor</title>
 </head>
+
 <body>
   <h1>Taste Predictor</h1>
 
@@ -110,8 +112,8 @@
 
       currentEntryId = data.entry_id;
 
-      document.getElementById("predictedScore").textContent = data.predicted_score;
-      document.getElementById("axesOutput").textContent = JSON.stringify(data.axes, null, 2);
+      document.getElementById("predictedScore").textContent = data.predicted_score_1_to_5;
+      document.getElementById("axesOutput").textContent = JSON.stringify(data.axis_features, null, 2);
 
       document.getElementById("predictionSection").style.display = "block";
       document.getElementById("validationSection").style.display = "block";
@@ -171,4 +173,5 @@
     };
   </script>
 </body>
+
 </html>
