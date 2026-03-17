@@ -17,6 +17,9 @@ from io import BytesIO
 
 pillow_heif.register_heif_opener()
 
+PROTOTYPE_FILE = Path(os.environ.get("PROTOTYPE_FILE", "/var/task/axis_prototypes.json"))
+PROTOTYPE_CACHE = None
+
 TABLE_NAME = os.environ["TABLE_NAME"]
 IMAGE_BUCKET = os.environ["IMAGE_BUCKET"]
 BEDROCK_MODEL_ID = os.environ.get(
@@ -36,43 +39,6 @@ dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
 table = dynamodb.Table(TABLE_NAME)
 s3 = boto3.client("s3", region_name=AWS_REGION)
 bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
-
-AXIS_BANK = {
-    "savory_depth": {
-        "positive": ["deep savory concentrated flavor","brothy umami-rich taste","long-cooked meaty savory character"],
-        "negative": ["thin low-impact flavor","watery bland savory profile","little lingering taste"],
-    },
-    "richness": {
-        "positive": ["rich fatty creamy buttery oily texture","coating luxurious richness","dense mouthfilling body"],
-        "negative": ["lean dry thin texture","light low fat mouthfeel","not rich or creamy"],
-    },
-    "acidity": {
-        "positive": ["bright acidic tangy sharp taste","citrusy vinegary pickled brightness","clean sour lift"],
-        "negative": ["mellow non acidic taste","soft rounded low brightness","neutral not tangy"],
-    },
-    "allium": {
-        "positive": ["strong onion garlic scallion aroma","savory sulfurous allium intensity","pungent aromatic onion note"],
-        "negative": ["no onion or garlic character","neutral aromatic profile","low pungency"],
-    },
-    "toasted_nut_seed": {
-        "positive": ["nutty roasted seed aroma","toasted earthy nutty richness","sesame like roasted aromatic quality"],
-        "negative": ["no roasted nutty seed character","neutral aroma without nuttiness","plain non toasted flavor"],
-    },
-    "char_maillard": {
-        "positive": ["charred browned roasted smoky surface","strong maillard caramelized crust","fire cooked smoky bitterness"],
-        "negative": ["steamed poached plain surface","no browning or roast character","soft pale uncarmelized finish"],
-    },
-    "heat": {
-        "positive": ["spicy hot peppery warming sensation","chili heat and aromatic spice","strong trigeminal heat"],
-        "negative": ["mild and not spicy","no pepper heat","soft gentle seasoning"],
-    },
-    "delicacy": {
-        "positive": ["subtle delicate faint mild flavor","light fragile refined taste","lean gentle understated profile"],
-        "negative": ["bold intense powerful flavor","heavy rich assertive taste","large flavor impact"],
-    },
-}
-
-PROTOTYPE_CACHE = {}
 
 def response(status: int, body: dict) -> dict:
     return {
@@ -189,17 +155,14 @@ def embed_image_base64(image_b64, fmt):
 
 def get_axis_embeddings():
     global PROTOTYPE_CACHE
-    if PROTOTYPE_CACHE:
+    if PROTOTYPE_CACHE is not None:
         return PROTOTYPE_CACHE
 
-    cache = {}
-    for axis, prompts in AXIS_BANK.items():
-        cache[axis] = {
-            "positive": [normalize(embed_text(p)) for p in prompts["positive"]],
-            "negative": [normalize(embed_text(p)) for p in prompts["negative"]],
-        }
-    PROTOTYPE_CACHE = cache
-    return cache
+    with PROTOTYPE_FILE.open("r") as f:
+        data = json.load(f)
+
+    PROTOTYPE_CACHE = data["axes"]
+    return PROTOTYPE_CACHE
 
 def compute_axis_features(vec):
     bank = get_axis_embeddings()
