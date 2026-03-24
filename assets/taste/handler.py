@@ -258,7 +258,7 @@ def handle_predict(body):
 
     raw, score, label, source = model_predict_score(axis_features, dish_embedding)
 
-    # STORE (like your original system)
+    # NOT STORED DURING PREDICTION
     item = {
         "id": entry_id,
         "record_type": "prediction",
@@ -274,23 +274,20 @@ def handle_predict(body):
         "updated_at": now,
     }
 
-    table.put_item(Item=to_decimal(item))
-
-    return response(200, {
-        "entry_id": entry_id,
-        "predicted_score_1_to_5": score,
-        "predicted_label": label,
-        "prediction_source": source,
-    })
+    # Don't store to DynamoDB here, wait for validation
+    return response(200, to_decimal(item))
 
 def handle_validate(body: dict) -> dict:
-    entry_id = body.get("entry_id")
+    if body.get("password") != os.environ.get("ADMIN_PASSWORD", "secret123"):
+        return response(401, {"error": "Invalid password"})
+
+    item = body.get("item")
     actual_score = body.get("actual_score")
     contributors = body.get("contributors", "")
     notes = body.get("notes", "")
 
-    if not entry_id or actual_score is None:
-        return response(400, {"error": "entry_id and actual_score are required"})
+    if not item or actual_score is None:
+        return response(400, {"error": "item and actual_score are required"})
 
     try:
         actual_score = float(actual_score)
@@ -302,18 +299,27 @@ def handle_validate(body: dict) -> dict:
 
     now = int(time.time())
 
-    table.update_item(
-        Key={"id": entry_id},
-        UpdateExpression="SET actual_score_1_to_5 = :a, contributors = :c, notes = :n, updated_at = :u",
-        ExpressionAttributeValues=to_decimal({
-            ":a": actual_score,
-            ":c": contributors,
-            ":n": notes,
-            ":u": now,
-        }),
-    )
+    item["actual_score_1_to_5"] = actual_score
+    item["contributors"] = contributors
+    item["notes"] = notes
+    item["updated_at"] = now
+    
+    table.put_item(Item=to_decimal(item))
 
     return response(200, {"ok": True})
+
+def handle_search(body: dict) -> dict:
+    query = (body.get("query") or "").lower()
+    try:
+        res = table.scan()
+        items = []
+        for it in res.get("Items", []):
+            title = it.get("title", "").lower()
+            if query in title:
+                items.append(it)
+        return response(200, {"items": to_decimal(items[:50])})
+    except Exception as e:
+        return response(500, {"error": str(e)})
 
 # KEEP your other handlers EXACTLY unchanged (validate, upload, get_entry)
 
@@ -335,6 +341,9 @@ def lambda_handler(event, context):
 
         if method == "POST" and path.endswith("/validate"):
             return handle_validate(json.loads(event.get("body") or "{}"))
+
+        if method == "POST" and path.endswith("/search"):
+            return handle_search(json.loads(event.get("body") or "{}"))
 
         if method == "POST" and path.endswith("/upload-training-data"):
             return handle_upload_training_data(json.loads(event.get("body") or "{}"))

@@ -1,75 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <title>Taste Predictor</title>
 </head>
-
 <body>
   <button onclick="window.location.href='../index.html'">← Back</button>
   <h1>Taste Predictor</h1>
+  
+  <button id="addFormBtn">+ Add Another Submission Form</button>
 
-  <h2>Submit Dish</h2>
-  <form id="submissionForm">
-    <label>Title:</label><br />
-    <input type="text" id="title" required /><br /><br />
+  <div id="formsContainer" style="display: flex; gap: 20px; overflow-x: auto; margin-top: 20px;"></div>
 
-    <label>Description:</label><br />
-    <textarea id="description" rows="4" required></textarea><br /><br />
+  <hr style="margin: 40px 0;" />
 
-    <label>Image:</label><br />
-    <input type="file" id="image" accept="image/*" /><br /><br />
-
-    <button type="submit">Submit</button>
-    <button type="button" id="clearFormBtn">Clear</button>
-  </form>
-
-  <div id="loading" style="display:none;">
-    <p>Loading...</p>
+  <h2>Search Past Entries</h2>
+  <div style="margin-bottom: 20px;">
+    <label>Search by Title:</label>
+    <input type="text" id="searchInput" />
+    <button onclick="searchEntries()">Search</button>
   </div>
+  
+  <div id="searchResults" style="display: flex; gap: 20px; overflow-x: auto;"></div>
 
-  <div id="predictionSection" style="display:none;">
-    <h2>Prediction</h2>
-    <p>Predicted Taste Score: <strong id="predictedScore"></strong></p>
-    <pre id="axesOutput"></pre>
-  </div>
+  <!-- TEMPLATE FOR FORM -->
+  <template id="formTemplate">
+    <div style="border: 1px solid #000; padding: 10px; min-width: 300px;">
+      <div style="display: flex; justify-content: space-between; align-items: start;">
+        <h2 style="margin-top: 0;">Submit Dish</h2>
+        <button type="button" class="remove-btn">X</button>
+      </div>
+      
+      <form class="submissionForm">
+        <label>Title:</label><br />
+        <input type="text" class="title" required /><br /><br />
 
-  <div id="validationSection" style="display:none;">
-    <h2>Validation</h2>
-    <form id="validationForm">
-      <label>Actual Taste Score:</label><br />
-      <select id="actualScore" required>
-        <option value="1">1 (no taste)</option>
-        <option value="2">2 (mild taste)</option>
-        <option value="3">3 (moderate taste)</option>
-        <option value="4">4 (strong taste)</option>
-        <option value="5">5 (intense taste)</option>
-      </select><br /><br />
+        <label>Description:</label><br />
+        <textarea class="description" rows="4" required></textarea><br /><br />
 
-      <label>High Contributor Ingredients:</label><br />
-      <input type="text" id="contributors" /><br /><br />
+        <label>Image:</label><br />
+        <input type="file" class="image" accept="image/*" /><br /><br />
 
-      <label>Notes:</label><br />
-      <textarea id="notes" rows="4"></textarea><br /><br />
+        <button type="submit">Submit</button>
+        <button type="button" class="clear-btn">Clear</button>
+      </form>
 
-      <button type="submit">Submit Validation</button>
-    </form>
-  </div>
+      <div class="loading" style="display:none; margin-top: 10px;">
+        <p>Loading...</p>
+      </div>
 
-  <h2>Past Entry Lookup</h2>
-  <form id="lookupForm">
-    <label>Entry ID:</label><br />
-    <input type="text" id="lookupId" /><br /><br />
-    <button type="submit">Lookup</button>
-  </form>
+      <div class="predictionSection" style="display:none; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px;">
+        <h2 style="margin-top: 0;">Prediction</h2>
+        <p>Predicted Taste Score: <strong class="predictedScore"></strong></p>
+        <p>Label: <span class="predictedLabel"></span></p>
+      </div>
 
-  <pre id="entryResult"></pre>
+      <div class="validationSection" style="display:none; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px;">
+        <h2 style="margin-top: 0;">Validation</h2>
+        <form class="validationForm">
+          <label>Actual Taste Score:</label><br />
+          <select class="actualScore" required>
+            <option value="1">1 (no taste)</option>
+            <option value="2">2 (mild taste)</option>
+            <option value="3">3 (moderate taste)</option>
+            <option value="4">4 (strong taste)</option>
+            <option value="5">5 (intense taste)</option>
+          </select><br /><br />
+
+          <label>High Contributor Ingredients:</label><br />
+          <input type="text" class="contributors" /><br /><br />
+
+          <label>Notes:</label><br />
+          <textarea class="notes" rows="4"></textarea><br /><br />
+
+          <label>Password (required):</label><br />
+          <input type="password" class="password" required /><br /><br />
+
+          <button type="submit">Submit Validation</button>
+        </form>
+      </div>
+    </div>
+  </template>
 
   <script>
     const API_BASE_URL = "https://hp58lhpeil.execute-api.us-east-1.amazonaws.com";
-
-    let currentEntryId = null;
+    let searchResultsData = [];
 
     function fileToDataUrl(file) {
       return new Promise((resolve, reject) => {
@@ -80,121 +95,188 @@
       });
     }
 
-    document.getElementById("clearFormBtn").onclick = () => {
-      document.getElementById("submissionForm").reset();
-      document.getElementById("predictionSection").style.display = "none";
-      document.getElementById("validationSection").style.display = "none";
-      document.getElementById("predictedScore").textContent = "";
-      document.getElementById("axesOutput").textContent = "";
-      currentEntryId = null;
-    };
+    function createForm() {
+      const template = document.getElementById("formTemplate").content.cloneNode(true);
+      const card = template.querySelector("div");
+      
+      const submissionForm = card.querySelector(".submissionForm");
+      const validationForm = card.querySelector(".validationForm");
+      
+      let currentItem = null;
 
-    document.getElementById("submissionForm").onsubmit = async (e) => {
-      e.preventDefault();
-
-      document.getElementById("loading").style.display = "block";
-
-      const title = document.getElementById("title").value.trim();
-      const description = document.getElementById("description").value.trim();
-      const imageFile = document.getElementById("image").files[0];
-
-      let imageBase64 = null;
-      let imageMimeType = null;
-
-      if (imageFile) {
-        imageBase64 = await fileToDataUrl(imageFile);
-        imageMimeType = imageFile.type;
-      }
-
-      const payload = {
-        title,
-        description,
-        image_base64: imageBase64,
-        image_mime_type: imageMimeType
+      card.querySelector(".remove-btn").onclick = () => card.remove();
+      
+      card.querySelector(".clear-btn").onclick = () => {
+        submissionForm.reset();
+        card.querySelector(".predictionSection").style.display = "none";
+        card.querySelector(".validationSection").style.display = "none";
+        card.querySelector(".predictedScore").textContent = "";
+        card.querySelector(".predictedLabel").textContent = "";
+        currentItem = null;
       };
 
-      try {
-        const response = await fetch(`${API_BASE_URL}/predict`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        });
+      submissionForm.onsubmit = async (e) => {
+        e.preventDefault();
+        
+        card.querySelector(".loading").style.display = "block";
+        card.querySelector(".predictionSection").style.display = "none";
+        card.querySelector(".validationSection").style.display = "none";
 
-        const data = await response.json();
+        const title = card.querySelector(".title").value.trim();
+        const description = card.querySelector(".description").value.trim();
+        const imageFile = card.querySelector(".image").files[0];
 
-        if (!response.ok) {
-          alert(data.error || "Prediction failed");
+        let imageBase64 = null;
+        let imageMimeType = null;
+        
+        if (imageFile) {
+          imageBase64 = await fileToDataUrl(imageFile);
+          imageMimeType = imageFile.type;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/predict`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title,
+              description,
+              image_base64: imageBase64,
+              image_mime_type: imageMimeType
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            alert(data.error || "Prediction failed");
+            return;
+          }
+
+          currentItem = data;
+
+          card.querySelector(".predictedScore").textContent = data.predicted_score_1_to_5;
+          card.querySelector(".predictedLabel").textContent = data.predicted_label;
+          
+          card.querySelector(".predictionSection").style.display = "block";
+          card.querySelector(".validationSection").style.display = "block";
+
+        } catch (err) {
+          alert("Error: " + err.message);
+        } finally {
+          card.querySelector(".loading").style.display = "none";
+        }
+      };
+
+      validationForm.onsubmit = async (e) => {
+        e.preventDefault();
+        
+        if (!currentItem) {
+          alert("No current entry to validate");
           return;
         }
 
-        currentEntryId = data.entry_id;
+        const payload = {
+          item: currentItem,
+          actual_score: card.querySelector(".actualScore").value,
+          contributors: card.querySelector(".contributors").value.trim(),
+          notes: card.querySelector(".notes").value.trim(),
+          password: card.querySelector(".password").value
+        };
 
-        document.getElementById("predictedScore").textContent = data.predicted_score_1_to_5;
-        document.getElementById("axesOutput").textContent = JSON.stringify(data.axis_features, null, 2);
+        try {
+          const response = await fetch(`${API_BASE_URL}/validate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
 
-        document.getElementById("predictionSection").style.display = "block";
-        document.getElementById("validationSection").style.display = "block";
+          const data = await response.json();
 
-      } finally {
-        document.getElementById("loading").style.display = "none";
-      }
-    };
+          if (!response.ok) {
+            alert(data.error || "Validation failed");
+            return;
+          }
 
-    document.getElementById("validationForm").onsubmit = async (e) => {
-      e.preventDefault();
-
-      if (!currentEntryId) {
-        alert("No current entry to validate");
-        return;
-      }
-
-      const payload = {
-        entry_id: currentEntryId,
-        actual_score: document.getElementById("actualScore").value,
-        contributors: document.getElementById("contributors").value.trim(),
-        notes: document.getElementById("notes").value.trim()
+          alert("Validation saved");
+        } catch (err) {
+          alert("Error: " + err.message);
+        }
       };
 
-      const response = await fetch(`${API_BASE_URL}/validate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
+      document.getElementById("formsContainer").appendChild(card);
+    }
 
-      const data = await response.json();
+    async function searchEntries() {
+      const q = document.getElementById("searchInput").value.trim();
+      const resContainer = document.getElementById("searchResults");
+      resContainer.innerHTML = "<p>Loading...</p>";
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/search`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          resContainer.innerHTML = "<p>Error: " + (data.error || "Search failed") + "</p>";
+          return;
+        }
 
-      if (!response.ok) {
-        alert(data.error || "Validation failed");
-        return;
+        searchResultsData = data.items || [];
+        resContainer.innerHTML = "";
+        
+        if (searchResultsData.length === 0) {
+          resContainer.innerHTML = "<p>No results found.</p>";
+          return;
+        }
+
+        searchResultsData.forEach((item, idx) => {
+          const div = document.createElement("div");
+          div.style = "border: 1px solid #ccc; padding: 10px; min-width: 250px;";
+          div.innerHTML = `
+            <h3 style="margin-top: 0;">${item.title || "Untitled"}</h3>
+            <p>${item.description || ""}</p>
+            <p>Predicted Taste Score: <strong>${item.predicted_score_1_to_5 || "N/A"}</strong></p>
+            <p>Actual Taste Score: <strong>${item.actual_score_1_to_5 || "N/A"}</strong></p>
+            <button onclick="addToCompare(${idx})">Add to Comparison</button>
+          `;
+          resContainer.appendChild(div);
+        });
+
+      } catch (err) {
+        resContainer.innerHTML = "<p>Error: " + err.message + "</p>";
       }
+    }
 
-      alert("Validation saved");
-    };
+    function addToCompare(idx) {
+      const item = searchResultsData[idx];
+      if (!item) return;
 
-    document.getElementById("lookupForm").onsubmit = async (e) => {
-      e.preventDefault();
+      const div = document.createElement("div");
+      div.style = "border: 1px solid #000; padding: 10px; min-width: 300px;";
+      div.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <h2 style="margin-top: 0; color: #333;">[Past] ${item.title || "Untitled"}</h2>
+          <button class="remove-btn">X</button>
+        </div>
+        <p>${item.description || ""}</p>
+        <p>Predicted Taste Score: <strong>${item.predicted_score_1_to_5 || "N/A"}</strong></p>
+        <p>Actual Taste Score: <strong>${item.actual_score_1_to_5 || "N/A"}</strong></p>
+        <p>Notes: <br/>${item.notes || ""}</p>
+      `;
+      div.querySelector(".remove-btn").onclick = () => div.remove();
+      
+      document.getElementById("formsContainer").appendChild(div);
+    }
 
-      const id = document.getElementById("lookupId").value.trim();
-      if (!id) {
-        alert("Enter an entry ID");
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/entry?id=${encodeURIComponent(id)}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        alert(data.error || "Lookup failed");
-        return;
-      }
-
-      document.getElementById("entryResult").textContent = JSON.stringify(data, null, 2);
-    };
+    document.getElementById("addFormBtn").onclick = createForm;
+    
+    // Create first form
+    createForm();
   </script>
 </body>
-
 </html>
