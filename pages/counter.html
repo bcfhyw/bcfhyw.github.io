@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counter</title>
+  <style>
+    body {
+      margin: 0;
+      line-height: 1.5;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #fafafa;
+    }
+    .counter {
+      font-size: 5rem;
+      font-weight: 700;
+      color: #111;
+      margin: 1rem 0;
+    }
+    .label {
+      font-size: 1.25rem;
+      color: #666;
+    }
+    a.back {
+      margin-top: 3rem;
+      color: #0066cc;
+      text-decoration: none;
+    }
+    a.back:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="label">Days since August 24, 2025</div>
+  <div class="counter" id="days-count">...</div>
+  
+  <a href="../index.html" class="back">← Back to Home</a>
+
+  <script>
+    function updateCounter() {
+      // August 24, 2025
+      const startDate = new Date('2025-08-24T00:00:00').getTime();
+      const now = new Date().getTime();
+      const diffMillis = now - startDate;
+      const days = Math.floor(diffMillis / (1000 * 60 * 60 * 24));
+      
+      document.getElementById('days-count').textContent = days;
+    }
+    updateCounter();
+    setInterval(updateCounter, 1000 * 60 * 60); // Update every hour
+  </script>
+</body>
+</html>
+
