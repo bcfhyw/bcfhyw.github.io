@@ -21,7 +21,7 @@
     <button onclick="searchEntries()">Search</button>
   </div>
   
-  <div id="searchResults" style="display: flex; gap: 20px; overflow-x: auto;"></div>
+  <div id="searchResults" style="display: block;"></div>
 
   <!-- TEMPLATE FOR FORM -->
   <template id="formTemplate">
@@ -207,49 +207,83 @@
       document.getElementById("formsContainer").appendChild(card);
     }
 
-    async function searchEntries() {
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
+    async function searchEntries(page = 1) {
+      if (typeof page !== 'number') page = 1;
       const q = document.getElementById("searchInput").value.trim();
       const resContainer = document.getElementById("searchResults");
-      resContainer.innerHTML = "<p>Loading...</p>";
       
-      try {
-        const response = await fetch(`${API_BASE_URL}/search`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-          resContainer.innerHTML = "<p>Error: " + (data.error || "Search failed") + "</p>";
+      if (page === 1) {
+        resContainer.innerHTML = "<p>Loading...</p>";
+        try {
+          const response = await fetch(`${API_BASE_URL}/search`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
+          });
+          
+          if (!response.ok) {
+            const errText = await response.text();
+            resContainer.innerHTML = "<p>Error: " + errText + "</p>";
+            return;
+          }
+
+          const data = await response.json();
+          searchResultsData = data.items || [];
+        } catch (err) {
+          resContainer.innerHTML = "<p>NetworkError: " + err.message + ". <br/><br/><b>IMPORTANT:</b> Did you remember to add the /search route to API Gateway and enable CORS for POST /search? API Gateway blocks unregistered routes by default without returning CORS headers.</p>";
           return;
         }
-
-        searchResultsData = data.items || [];
-        resContainer.innerHTML = "";
-        
-        if (searchResultsData.length === 0) {
-          resContainer.innerHTML = "<p>No results found.</p>";
-          return;
-        }
-
-        searchResultsData.forEach((item, idx) => {
-          const div = document.createElement("div");
-          div.style = "border: 1px solid #ccc; padding: 10px; min-width: 250px;";
-          div.innerHTML = `
-            <h3 style="margin-top: 0;">${item.title || "Untitled"}</h3>
-            <p>${item.description || ""}</p>
-            <p>Predicted Taste Score: <strong>${item.predicted_score_1_to_5 || "N/A"}</strong></p>
-            <p>Actual Taste Score: <strong>${item.actual_score_1_to_5 || "N/A"}</strong></p>
-            <button onclick="addToCompare(${idx})">Add to Comparison</button>
-          `;
-          resContainer.appendChild(div);
-        });
-
-      } catch (err) {
-        resContainer.innerHTML = "<p>Error: " + err.message + "</p>";
       }
+
+      currentPage = page;
+      resContainer.innerHTML = "";
+      
+      if (searchResultsData.length === 0) {
+        resContainer.innerHTML = "<p>No results found.</p>";
+        return;
+      }
+
+      const totalItems = searchResultsData.length;
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+      const pageData = searchResultsData.slice(startIndex, endIndex);
+
+      const itemsDiv = document.createElement("div");
+      itemsDiv.style = "display: flex; gap: 20px; overflow-x: auto; width: 100%; padding-bottom: 10px;";
+
+      pageData.forEach((item, idx) => {
+        const globalIdx = startIndex + idx;
+        const div = document.createElement("div");
+        div.style = "border: 1px solid #ccc; padding: 10px; min-width: 250px;";
+        div.innerHTML = `
+          <h3 style="margin-top: 0;">#${globalIdx + 1} - ${item.title || "Untitled"}</h3>
+          <p>${item.description || ""}</p>
+          <p>Predicted Taste Score: <strong>${item.predicted_score_1_to_5 || "N/A"}</strong></p>
+          <p>Actual Taste Score: <strong>${item.actual_score_1_to_5 || "N/A"}</strong></p>
+          <button onclick="addToCompare(${globalIdx})">Add to Comparison</button>
+        `;
+        itemsDiv.appendChild(div);
+      });
+
+      resContainer.appendChild(itemsDiv);
+
+      const paginationDiv = document.createElement("div");
+      paginationDiv.style = "margin-top: 10px; display: flex; gap: 10px; align-items: center;";
+      
+      const totalPages = Math.ceil(totalItems / itemsPerPage);
+      let btnHtml = "";
+      if (currentPage > 1) {
+        btnHtml += `<button onclick="searchEntries(${currentPage - 1})">Prev</button> `;
+      }
+      btnHtml += `<span>Page ${currentPage} of ${totalPages} (${startIndex + 1}-${endIndex} of ${totalItems})</span>`;
+      if (currentPage < totalPages) {
+        btnHtml += `<button onclick="searchEntries(${currentPage + 1})">Next</button>`;
+      }
+      paginationDiv.innerHTML = btnHtml;
+      resContainer.appendChild(paginationDiv);
     }
 
     function addToCompare(idx) {

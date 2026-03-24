@@ -40,6 +40,14 @@ table = dynamodb.Table(TABLE_NAME)
 s3 = boto3.client("s3", region_name=AWS_REGION)
 bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
 
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            if obj % 1 == 0:
+                return int(obj)
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
+
 def response(status: int, body: dict) -> dict:
     return {
         "statusCode": status,
@@ -49,7 +57,7 @@ def response(status: int, body: dict) -> dict:
             "Access-Control-Allow-Headers": "Content-Type",
             "Access-Control-Allow-Methods": "OPTIONS,GET,POST",
         },
-        "body": json.dumps(body),
+        "body": json.dumps(body, cls=DecimalEncoder),
     }
 
 def to_decimal(value):
@@ -278,7 +286,7 @@ def handle_predict(body):
     return response(200, to_decimal(item))
 
 def handle_validate(body: dict) -> dict:
-    if body.get("password") != os.environ.get("ADMIN_PASSWORD", "secret123"):
+    if body.get("password") != os.environ.get("ADMIN_PASSWORD", "test"):
         return response(401, {"error": "Invalid password"})
 
     item = body.get("item")
@@ -317,7 +325,7 @@ def handle_search(body: dict) -> dict:
             title = it.get("title", "").lower()
             if query in title:
                 items.append(it)
-        return response(200, {"items": to_decimal(items[:50])})
+        return response(200, {"items": to_decimal(items[:500])})
     except Exception as e:
         return response(500, {"error": str(e)})
 
