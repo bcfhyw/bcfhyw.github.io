@@ -17,7 +17,7 @@
       background-color: #fafafa;
     }
     .counter {
-      font-size: 5rem;
+      font-size: 3rem;
       font-weight: 700;
       color: #111;
       margin: 1rem 0;
@@ -37,7 +37,7 @@
   </style>
 </head>
 <body>
-  <div class="label">Days since August 24, 2025 6:50 PM PT</div>
+  <div class="label">Time since August 24, 2025 6:50 PM PT</div>
   <div class="counter" id="days-count">...</div>
   
   <a href="../index.html" class="back">← Back to Home</a>
@@ -45,15 +45,27 @@
   <script>
     function updateCounter() {
       // August 24, 2025, 6:50 PM PT (UTC-7)
-      const startDate = new Date('2025-08-25T01:50:00Z').getTime(); // 6:50 PM PT = 01:50 UTC next day
+      const startDate = new Date('2025-08-25T01:50:00Z').getTime(); 
       const now = new Date().getTime();
-      const diffMillis = now - startDate;
+      let diffMillis = now - startDate;
+
       const days = Math.floor(diffMillis / (1000 * 60 * 60 * 24));
-      
-      document.getElementById('days-count').textContent = days;
+      diffMillis -= days * (1000 * 60 * 60 * 24);
+
+      const hours = Math.floor(diffMillis / (1000 * 60 * 60));
+      diffMillis -= hours * (1000 * 60 * 60);
+
+      const minutes = Math.floor(diffMillis / (1000 * 60));
+      diffMillis -= minutes * (1000 * 60);
+
+      const seconds = Math.floor(diffMillis / 1000);
+
+      document.getElementById('days-count').textContent = 
+        `${days}d ${hours}h ${minutes}m ${seconds}s`;
     }
+
     updateCounter();
-    setInterval(updateCounter, 1000 * 60 * 60); // Update every hour
+    setInterval(updateCounter, 1000); // Update every second
   </script>
 </body>
 </html>
