@@ -26,6 +26,12 @@
       font-size: 1.25rem;
       color: #666;
     }
+    .alert {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      color: #fd9ed0;
+      font-weight: 600;
+    }
     a.back {
       margin-top: 3rem;
       color: #0066cc;
@@ -37,35 +43,124 @@
   </style>
 </head>
 <body>
-  <div class="label">Time since August 24, 2025 6:50 PM PT</div>
+  <div class="label">Since August 24, 2025 6:50 PM PT, it has been:</div>
   <div class="counter" id="days-count">...</div>
+  <div class="alert" id="special-alert"></div>
   
   <a href="../index.html" class="back">← Back to Home</a>
 
   <script>
+    const startDate = new Date('2025-08-25T01:50:00Z'); // 6:50 PM PT
+    const seedText = "bohacek-wang"; // Can be any text
+    const probability = 0.005; // ~1 per 100 days
+    const alertDays = 7;
+    const minGap = 30; // minimum days between special days
+
+    // --- Convert text to numeric seed ---
+    function textToSeed(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = (hash * 31 + str.charCodeAt(i)) % 2147483647;
+      }
+      if (hash <= 0) hash += 2147483646;
+      return hash;
+    }
+
+    const seed = textToSeed(seedText);
+
+    // --- Seeded PRNG ---
+    function seededRandom(seed) {
+      let value = seed % 2147483647;
+      if (value <= 0) value += 2147483646;
+      return function() {
+        value = (value * 16807) % 2147483647;
+        return (value - 1) / 2147483646;
+      }
+    }
+
+    // --- Determine if a day is special considering 30-day gap ---
+    function isSpecialDay(date, seed, probability, specialDays) {
+      const y = date.getFullYear();
+      const m = date.getMonth() + 1;
+      const d = date.getDate();
+      const dayNumber = y * 10000 + m * 100 + d;
+
+      // Check minimum gap
+      for (const prev of specialDays) {
+        const diffDays = Math.floor((date - prev) / (1000*60*60*24));
+        if (diffDays < minGap) return false;
+      }
+
+      const rand = seededRandom(seed + dayNumber)();
+      return rand < probability;
+    }
+
+    // --- Compute all special days up to a given date ---
+    function generateSpecialDays(uptoDate, seed, probability) {
+      const specialDays = [];
+      const current = new Date(startDate);
+      while (current <= uptoDate) {
+        if (isSpecialDay(current, seed, probability, specialDays)) {
+          specialDays.push(new Date(current));
+        }
+        current.setDate(current.getDate() + 1);
+      }
+      return specialDays;
+    }
+
+    // --- Find next special day within alertDays ---
+    function nextSpecialDay(today, seed, probability, alertDays) {
+      const specialDays = generateSpecialDays(new Date(today.getTime() + alertDays*24*60*60*1000), seed, probability);
+      for (const day of specialDays) {
+        if (day >= today) return day;
+      }
+      return null;
+    }
+
+    // --- Compute day number since start ---
+    function dayNumberSinceStart(date) {
+      const diffMillis = date - startDate;
+      return Math.floor(diffMillis / (1000 * 60 * 60 * 24)) + 1;
+    }
+
+    // --- Update Countdown ---
     function updateCounter() {
-      // August 24, 2025, 6:50 PM PT (UTC-7)
-      const startDate = new Date('2025-08-25T01:50:00Z').getTime(); 
-      const now = new Date().getTime();
+      const now = new Date();
       let diffMillis = now - startDate;
 
-      const days = Math.floor(diffMillis / (1000 * 60 * 60 * 24));
-      diffMillis -= days * (1000 * 60 * 60 * 24);
+      const days = Math.floor(diffMillis / (1000*60*60*24));
+      diffMillis -= days * (1000*60*60*24);
 
-      const hours = Math.floor(diffMillis / (1000 * 60 * 60));
-      diffMillis -= hours * (1000 * 60 * 60);
+      const hours = Math.floor(diffMillis / (1000*60*60));
+      diffMillis -= hours * (1000*60*60);
 
-      const minutes = Math.floor(diffMillis / (1000 * 60));
-      diffMillis -= minutes * (1000 * 60);
+      const minutes = Math.floor(diffMillis / (1000*60));
+      diffMillis -= minutes * (1000*60);
 
       const seconds = Math.floor(diffMillis / 1000);
 
       document.getElementById('days-count').textContent = 
-        `${days}d ${hours}h ${minutes}m ${seconds}s`;
+        `${days}d ${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m ${String(seconds).padStart(2,'0')}s`;
+
+      const specialDate = nextSpecialDay(now, seed, probability, alertDays);
+      const alertBox = document.getElementById('special-alert');
+
+      if (specialDate) {
+        const diff = specialDate - now;
+        const d = Math.floor(diff / (1000*60*60*24));
+        const h = Math.floor((diff % (1000*60*60*24)) / (1000*60*60));
+        const m = Math.floor((diff % (1000*60*60)) / (1000*60));
+        const s = Math.floor((diff % (1000*60)) / 1000);
+
+        const anniversaryNumber = dayNumberSinceStart(specialDate);
+        alertBox.textContent = `${anniversaryNumber}th day anniversary in ${d} day(s)!`;
+      } else {
+        alertBox.textContent = '';
+      }
     }
 
     updateCounter();
-    setInterval(updateCounter, 1000); // Update every second
+    setInterval(updateCounter, 1000);
   </script>
 </body>
 </html>
