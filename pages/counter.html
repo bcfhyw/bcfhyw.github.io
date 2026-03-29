@@ -37,15 +37,15 @@
   </style>
 </head>
 <body>
-  <div class="label">Days since August 24, 2025 6:50 AM PT</div>
+  <div class="label">Days since August 24, 2025 6:50 PM PT</div>
   <div class="counter" id="days-count">...</div>
   
   <a href="../index.html" class="back">← Back to Home</a>
 
   <script>
     function updateCounter() {
-      // August 24, 2025, 6:50 AM PT (UTC-7)
-      const startDate = new Date('2025-08-24T13:50:00Z').getTime(); // 6:50 AM PT = 13:50 UTC
+      // August 24, 2025, 6:50 PM PT (UTC-7)
+      const startDate = new Date('2025-08-25T01:50:00Z').getTime(); // 6:50 PM PT = 01:50 UTC next day
       const now = new Date().getTime();
       const diffMillis = now - startDate;
       const days = Math.floor(diffMillis / (1000 * 60 * 60 * 24));
