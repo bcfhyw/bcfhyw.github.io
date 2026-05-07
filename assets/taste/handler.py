@@ -231,17 +231,104 @@ def model_predict_score(fmap, dish_embedding):
     label_map = {1:"No",2:"Meh",3:"Yes-",4:"Yes",5:"YES"}
     return raw, score, label_map[score], "retrieval_blend"
 
-def build_dish_vector(description, image_b64, image_mime_type):
+def build_dish_vector(description, image_b64, image_mime_type, align=True):
     text = normalize(embed_text(description))
 
     if not image_b64:
-        return text, None, False, None
+        return text, None, text, False, None
 
     fmt = infer_image_format(image_mime_type, image_b64)
     image_b64, fmt = normalize_image(image_b64, fmt)
     img = normalize(embed_image_base64(image_b64, fmt))
 
-    return normalize(weighted_average_vectors([(text,0.65),(img,0.35)])), img, True, fmt
+    if align:
+        text, img = align_embeddings(text, img)
+
+    fused = normalize(weighted_average_vectors([(text, 0.65), (img, 0.35)]))
+    return fused, img, text, True, fmt
+
+
+def mean_vector(vectors):
+    if not vectors:
+        return None
+    dim = len(vectors[0])
+    out = [0.0] * dim
+    for v in vectors:
+        for i, x in enumerate(v):
+            out[i] += x
+    n = len(vectors)
+    return [x / n for x in out]
+
+
+def sub_vectors(a, b):
+    return [x - y for x, y in zip(a, b)]
+
+
+def add_vectors(a, b):
+    return [x + y for x, y in zip(a, b)]
+
+
+def scale_vector(v, s):
+    return [x * s for x in v]
+
+
+def compute_modality_gap():
+    """Scan training examples and compute mean text/image embeddings."""
+    res = table.scan(
+        FilterExpression=Attr("record_type").eq("training_example"),
+        Limit=MAX_TRAINING_SCAN,
+    )
+    text_embs = []
+    image_embs = []
+    for item in res.get("Items", []):
+        te = item.get("text_embedding")
+        ie = item.get("image_embedding")
+        if te and ie:
+            text_embs.append([float(x) for x in te])
+            image_embs.append([float(x) for x in ie])
+
+    if not text_embs:
+        return None
+
+    text_mean = mean_vector(text_embs)
+    image_mean = mean_vector(image_embs)
+    global_mean = scale_vector(add_vectors(text_mean, image_mean), 0.5)
+    return {
+        "text_mean": text_mean,
+        "image_mean": image_mean,
+        "global_mean": global_mean,
+        "count": len(text_embs),
+    }
+
+
+# Lazily-loaded alignment stats
+ALIGNMENT_STATS = None
+
+def get_alignment_stats():
+    global ALIGNMENT_STATS
+    if ALIGNMENT_STATS is None:
+        ALIGNMENT_STATS = compute_modality_gap()
+    return ALIGNMENT_STATS
+
+
+def align_embeddings(text_emb, image_emb):
+    """Mean-center each modality into a shared global centroid."""
+    stats = get_alignment_stats()
+    if stats is None:
+        return text_emb, image_emb
+
+    text_mean = stats["text_mean"]
+    image_mean = stats["image_mean"]
+    global_mean = stats["global_mean"]
+
+    aligned_text = add_vectors(sub_vectors(text_emb, text_mean), global_mean)
+    aligned_image = add_vectors(sub_vectors(image_emb, image_mean), global_mean)
+    return normalize(aligned_text), normalize(aligned_image)
+
+
+def text_image_distance(text_emb, image_emb):
+    """Cosine similarity between text and image embeddings (post-alignment if used)."""
+    return cosine(text_emb, image_emb)
 
 # ===== HANDLERS (UNCHANGED) =====
 
@@ -256,7 +343,7 @@ def handle_predict(body):
     entry_id = str(uuid.uuid4())
     now = int(time.time())
 
-    dish_embedding, image_embedding, has_image, image_format = build_dish_vector(
+    dish_embedding, image_embedding, text_embedding, has_image, image_format = build_dish_vector(
         description,
         body.get("image_base64"),
         body.get("image_mime_type"),
@@ -274,6 +361,8 @@ def handle_predict(body):
         "title": title,
         "description": description,
         "dish_embedding": dish_embedding,
+        "text_embedding": text_embedding,
+        "image_embedding": image_embedding,
         "axis_features": axis_features,
         "predicted_score_1_to_5": score,
         "predicted_label": label,
@@ -331,6 +420,39 @@ def handle_search(body: dict) -> dict:
 
 # KEEP your other handlers EXACTLY unchanged (validate, upload, get_entry)
 
+def handle_modality_gap(body: dict) -> dict:
+    password = body.get("password", "")
+    if password != os.environ.get("ADMIN_PASSWORD", "test"):
+        return response(401, {"error": "Invalid password"})
+
+    stats = compute_modality_gap()
+    if stats is None:
+        return response(200, {"message": "No paired text/image embeddings found yet."})
+
+    # Report average cosine similarity before and after alignment
+    res = table.scan(
+        FilterExpression=Attr("record_type").eq("training_example"),
+        Limit=MAX_TRAINING_SCAN,
+    )
+    raw_sims = []
+    aligned_sims = []
+    for item in res.get("Items", []):
+        te = item.get("text_embedding")
+        ie = item.get("image_embedding")
+        if te and ie:
+            te = [float(x) for x in te]
+            ie = [float(x) for x in ie]
+            raw_sims.append(cosine(te, ie))
+            ate, aie = align_embeddings(te, ie)
+            aligned_sims.append(cosine(ate, aie))
+
+    return response(200, {
+        "count": stats["count"],
+        "raw_avg_cosine": sum(raw_sims) / len(raw_sims) if raw_sims else None,
+        "aligned_avg_cosine": sum(aligned_sims) / len(aligned_sims) if aligned_sims else None,
+    })
+
+
 def lambda_handler(event, context):
     try:
         method = (
@@ -352,6 +474,9 @@ def lambda_handler(event, context):
 
         if method == "POST" and path.endswith("/search"):
             return handle_search(json.loads(event.get("body") or "{}"))
+
+        if method == "POST" and path.endswith("/modality-gap"):
+            return handle_modality_gap(json.loads(event.get("body") or "{}"))
 
         if method == "POST" and path.endswith("/upload-training-data"):
             return handle_upload_training_data(json.loads(event.get("body") or "{}"))
